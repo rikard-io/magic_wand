@@ -42,8 +42,9 @@ constexpr int raster_channels = 3;
 constexpr int raster_byte_count = raster_height * raster_width * raster_channels;
 int8_t raster_buffer[raster_byte_count];
 
-BLEService        service                       (BLE_SENSE_UUID("0000"));
-BLECharacteristic strokeCharacteristic          (BLE_SENSE_UUID("300a"), BLERead, stroke_struct_byte_count);
+BLEService              service               (BLE_SENSE_UUID("0000"));
+BLECharacteristic       strokeCharacteristic  (BLE_SENSE_UUID("300a"), BLERead, stroke_struct_byte_count);
+BLEStringCharacteristic jsonCharacteristic    (BLE_SENSE_UUID("300b"), BLERead | BLENotify, 255);
 
 // String to calculate the local and device name
 String name;
@@ -537,6 +538,7 @@ void setup() {
   BLE.setAdvertisedService(service);
 
   service.addCharacteristic(strokeCharacteristic);
+  service.addCharacteristic(jsonCharacteristic);
 
   BLE.addService(service);
 
@@ -556,6 +558,7 @@ void setup() {
                          "Model provided is schema version %d not equal "
                          "to supported version %d.",
                          model->version(), TFLITE_SCHEMA_VERSION);
+    jsonCharacteristic.setValue("{\"error\": \"Model schema version mismatch\"}");
     return;
   }
 
@@ -586,6 +589,7 @@ void setup() {
       (model_input->type != kTfLiteInt8)) {
     TF_LITE_REPORT_ERROR(error_reporter,
                          "Bad input tensor parameters in model");
+    jsonCharacteristic.setValue("{\"error\": \"Bad input tensor parameters in model\"}");
     return;
   }
 
@@ -595,6 +599,7 @@ void setup() {
       (model_output->type != kTfLiteInt8)) {
     TF_LITE_REPORT_ERROR(error_reporter,
                          "Bad output tensor parameters in model");
+    jsonCharacteristic.setValue("{\"error\": \"Bad output tensor parameters in model\"}");
     return;
   }
 
@@ -665,6 +670,7 @@ void loop() {
     TfLiteStatus invoke_status = interpreter->Invoke();
     if (invoke_status != kTfLiteOk) {
       TF_LITE_REPORT_ERROR(error_reporter, "Invoke failed");
+      jsonCharacteristic.setValue("{\"error\": \"Invoke failed\"}");
       return;
     }
    
@@ -680,5 +686,6 @@ void loop() {
       }
     }
     TF_LITE_REPORT_ERROR(error_reporter, "Found %s (%d)", labels[max_index], max_score);
+    jsonCharacteristic.setValue("{\"label\": \"" + String(labels[max_index]) + "\",\"score\":" + String(max_score) + "}");
   }
 }
